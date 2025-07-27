@@ -1,59 +1,112 @@
-import * as React from "react";
-import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { cn } from "@/lib/utils";
+import { Company } from "../models/company.model.js";
+import getDataUri from "../utils/datauri.js";
+import cloudinary from "../utils/cloudinary.js";
+import { User } from "../models/user.model.js";
 
-const Tabs = TabsPrimitive.Root;
+export const registerCompany = async (req, res) => {
+  try {
+    const { companyName } = req.body;
+    if (!companyName) {
+      return res.status(400).json({
+        message: "Company name is required.",
+        success: false,
+      });
+    }
+    let company = await Company.findOne({ name: companyName });
+    if (company) {
+      return res.status(400).json({
+        message: "You can't register same company.",
+        success: false,
+      });
+    }
 
-const TabsList = React.forwardRef(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      "inline-flex h-10 items-center justify-center rounded-lg bg-[#F0F7F4] p-1 text-[#3A5A40]",
-      "dark:bg-[#16213E] dark:text-[#A0AEC0]",
-      "border border-[#D8F3DC] dark:border-[#2D3748]",
-      "shadow-sm",
-      className
-    )}
-    {...props}
-  />
-));
-TabsList.displayName = TabsPrimitive.List.displayName;
+    const recruiter = await User.findById(req.id); // ✅ recruiter user
+    if (!recruiter) {
+      return res.status(404).json({
+        message: "Recruiter not found.",
+        success: false,
+      });
+    }
 
-const TabsTrigger = React.forwardRef(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-all",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#537D5D] focus-visible:ring-offset-2",
-      "disabled:pointer-events-none disabled:opacity-50",
-      "data-[state=active]:bg-white data-[state=active]:text-[#1B4332] data-[state=active]:shadow-sm",
-      "data-[state=active]:border data-[state=active]:border-[#D8F3DC]",
-      "dark:data-[state=active]:bg-[#2D3748] dark:data-[state=active]:text-[#E2E8F0]",
-      "dark:focus-visible:ring-[#D8F3DC]",
-      "hover:bg-[#D8F3DC]/50 dark:hover:bg-[#2D6A4F]/30",
-      "transition-colors duration-200",
-      className
-    )}
-    {...props}
-  />
-));
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
+    company = await Company.create({
+      name: companyName,
+      userId: req.id,
+      email: recruiter.email // ✅ fix: required field
+    });
 
-const TabsContent = React.forwardRef(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      "mt-3 rounded-lg p-4",
-      "bg-white border border-[#F0F7F4]",
-      "dark:bg-[#16213E] dark:border-[#2D3748]",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#537D5D] focus-visible:ring-offset-2",
-      "dark:focus-visible:ring-[#D8F3DC]",
-      "shadow-sm",
-      className
-    )}
-    {...props}
-  />
-));
-TabsContent.displayName = TabsPrimitive.Content.displayName;
+    return res.status(201).json({
+      message: "Company registered successfully.",
+      company,
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+  }
+};
+export const getCompany = async (req, res) => {
+  try {
+    const userId = req.id; // logged in user id
+    const companies = await Company.find({ userId });
+    if (!companies) {
+      return res.status(404).json({
+        message: "Companies not found.",
+        success: false,
+      });
+    }
+    return res.status(200).json({
+      companies,
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+  }
+};
+// get company by id
+export const getCompanyById = async (req, res) => {
+  try {
+    const companyId = req.params.id;
+    const company = await Company.findById(companyId);
+    if (!company) {
+      return res.status(404).json({
+        message: "Company not found.",
+        success: false,
+      });
+    }
+    return res.status(200).json({
+      company,
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+  }
+};
+export const updateCompany = async (req, res) => {
+  try {
+    const { name, description, website, location } = req.body;
 
-export { Tabs, TabsList, TabsTrigger, TabsContent };
+    const file = req.file;
+    // idhar cloudinary ayega
+    const fileUri = getDataUri(file);
+    const cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+    const logo = cloudResponse.secure_url;
+
+    const updateData = { name, description, website, location, logo };
+
+    const company = await Company.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+    });
+
+    if (!company) {
+      return res.status(404).json({
+        message: "Company not found.",
+        success: false,
+      });
+    }
+    return res.status(200).json({
+      message: "Company information updated.",
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+  }
+};
